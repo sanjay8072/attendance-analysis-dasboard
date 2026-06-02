@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login - Attendance Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="login-shell">
+    <div class="login-card">
+      <h1>Sign in</h1>
+      <p class="login-subtitle">Secure access to your attendance analytics dashboard.</p>
+      {% if message %}
+      <div class="message error" style="display:block;margin-bottom:16px">{{ message }}</div>
+      {% endif %}
+      <form method="post">
+        <label>Username</label>
+        <input type="text" name="username" required autofocus />
+        <label style="margin-top:16px">Password</label>
+        <input type="password" name="password" required />
+        <button type="submit" class="button" style="width:100%;margin-top:24px">Login</button>
+      </form>
+      <p class="note" style="margin-top:20px;color:#94a3b8">Use admin/password123 or manager/attendance.</p>
+    </div>
+  </div>
+</body>
+</html>

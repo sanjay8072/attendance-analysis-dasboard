@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student Attendance</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container" style="padding-top:30px">
+    <a href="/" class="button button-secondary">← Back</a>
+    <h1>Attendance for {{ student_name }}</h1>
+    <div class="card" style="margin-top:12px">
+      <h3>Attendance Timeline</h3>
+      <canvas id="studentChart"></canvas>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>Summary</h3>
+      <ul>
+        <li id="totalDays">Total records: —</li>
+        <li id="presentCount">Present: —</li>
+        <li id="absentCount">Absent: —</li>
+        <li id="currentStreak">Current present streak: — days</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+async function fetchJSON(url){
+  const res = await fetch(url);
+  return res.json();
+}
+
+(async ()=>{
+  const studentId = {{ student_id }};
+  const data = await fetchJSON(`/api/student/${studentId}`);
+  const labels = data.map(r => r.date);
+  const values = data.map(r => r.present ? 1 : 0);
+  new Chart(document.getElementById('studentChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Present (1=present)', data: values, backgroundColor: values.map(v=> v? '#10b981':'#ef4444') }] },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 1, ticks: { stepSize: 1 } } } }
+  });
+
+  const total = values.length;
+  const present = values.filter(v=>v===1).length;
+  const absent = total - present;
+  document.getElementById('totalDays').textContent = `Total records: ${total}`;
+  document.getElementById('presentCount').textContent = `Present: ${present}`;
+  document.getElementById('absentCount').textContent = `Absent: ${absent}`;
+
+  // compute current present streak from end
+  let streak = 0;
+  for (let i = values.length-1; i>=0; i--) {
+    if (values[i] === 1) streak++; else break;
+  }
+  document.getElementById('currentStreak').textContent = `Current present streak: ${streak} days`;
+})();
+</script>
+</body>
+</html>
