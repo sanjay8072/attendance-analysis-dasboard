@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Attendance Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-content">
+      <div>
+        <p class="eyebrow">Secure Dashboard</p>
+        <h1>Attendance Insights</h1>
+        <p class="hero-copy">Professional attendance analytics with login security, file upload, date filters, and student management.</p>
+      </div>
+      <div class="hero-actions">
+        <span class="user-badge">Logged in as {{ user }}</span>
+        <a href="/logout" class="button button-secondary">Logout</a>
+      </div>
+    </div>
+  </div>
+  <div class="container">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Students</div>
+        <div class="stat-value" id="statStudents">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Days</div>
+        <div class="stat-value" id="statDays">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Average Attendance</div>
+        <div class="stat-value" id="statAverage">—%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Absences</div>
+        <div class="stat-value" id="statAbsences">—</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Upload Attendance CSV</h3>
+      <p>Select a CSV file containing <code>date, student_id, student_name, present</code>.</p>
+      <input type="file" id="csvFile" accept=".csv" />
+      <button id="uploadCsv" class="button">Upload CSV</button>
+      <span id="uploadMsg" class="message success"></span>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Date range filter</h3>
+      <div class="filter-row">
+        <label>Start: <input type="date" id="startDate" /></label>
+        <label>End: <input type="date" id="endDate" /></label>
+        <button id="applyRange" class="button">Apply Filter</button>
+        <button id="clearRange" class="button button-secondary">Clear</button>
+      </div>
+      <p id="rangeMsg" class="message info"></p>
+    </div>
+    <div class="card" id="attendanceSection" style="margin-bottom:16px; border: 2px solid #10b981;">
+      <h3>Take Attendance (Daily Sheet)</h3>
+      <div class="filter-row">
+        <label>Date: <input type="date" id="attendanceDate" /></label>
+        <button id="loadAttendance" class="button">Load Day</button>
+        <button id="saveAttendance" class="button">Save Day</button>
+        <span id="attendanceMsg" style="margin-left:12px;color:green"></span>
+      </div>
+      <div id="attendanceTable" style="margin-top:12px"></div>
+    </div>
+    <div class="chart-row">
+      <div class="card">
+        <h3>Daily Attendance Rate (%)</h3>
+        <canvas id="dailyChart"></canvas>
+      </div>
+      <div class="card">
+        <h3>Top Absences</h3>
+        <canvas id="absentChart"></canvas>
+      </div>
+    </div>
+    <p class="note">Data comes from <a href="/data/attendance.csv">data/attendance.csv</a> (generated if missing)</p>
+  </div>
+
+  <div class="container">
+    <div class="card" style="margin-top:16px">
+      <h3>Generate Public Share Link</h3>
+      <p>Create a read-only share link for your dashboard that anyone can open without logging in.</p>
+      <button id="generateShare" class="button">Generate Share Link</button>
+      <div style="margin-top:8px">
+        <input id="shareLink" type="text" readonly style="width:100%;padding:8px;margin-top:8px" placeholder="Share link will appear here" />
+        <p id="shareMsg" class="message success" style="margin-top:8px"></p>
+      </div>
+    </div>
+  </div>
+  <div class="container">
+    <div class="card" style="margin-top:16px">
+      <div id="studentsForm"></div>
+      <div style="margin-top:8px">
+        <button id="loadStudents">Load Students</button>
+        <button id="saveStudents">Save Names</button>
+        <span id="saveMsg" style="margin-left:12px;color:green"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function fetchJSON(url){
+  const res = await fetch(url);
+  return res.json();
+}
+
+let dailyChartInstance = null;
+let absentChartInstance = null;
+
+function currentFilters(){
+  const start = document.getElementById('startDate').value;
+  const end = document.getElementById('endDate').value;
+  const params = new URLSearchParams();
+  if (start) params.append('start_date', start);
+  if (end) params.append('end_date', end);
+  return params.toString() ? `?${params.toString()}` : '';
+}
+
+async function fetchDaily(){
+  const daily = await fetchJSON(`/api/daily_rates${currentFilters()}`);
+  renderDaily(daily);
+  return daily;
+}
+
+async function fetchAbsences(){
+  const abs = await fetchJSON(`/api/absences${currentFilters()}`);
+  renderAbsences(abs.slice(0,10));
+  return abs;
+}
+
+async function fetchSummary(){
+  const summary = await fetchJSON(`/api/summary${currentFilters()}`);
+  document.getElementById('statStudents').textContent = summary.total_students;
+  document.getElementById('statDays').textContent = summary.total_days;
+  document.getElementById('statAverage').textContent = `${summary.average_attendance}%`;
+  document.getElementById('statAbsences').textContent = summary.total_absences;
+  return summary;
+}
+
+async function fetchStudents(){
+  const list = await fetchJSON('/api/students');
+  const container = document.getElementById('studentsForm');
+  container.innerHTML = '';
+  list.forEach(s => {
+    const row = document.createElement('div');
+    row.style.marginBottom = '6px';
+    row.innerHTML = `<label style="width:120px;display:inline-block">ID ${s.student_id}</label><input data-id="${s.student_id}" value="${s.student_name}" style="width:300px" />`;
+    container.appendChild(row);
+  });
+}
+
+async function saveStudents(){
+  const inputs = Array.from(document.querySelectorAll('#studentsForm input'));
+  const payload = inputs.map(i => ({ student_id: i.getAttribute('data-id'), student_name: i.value }));
+  const res = await fetch('/api/update_names', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  const j = await res.json();
+  document.getElementById('saveMsg').textContent = j.status === 'ok' ? 'Saved' : 'Error';
+  await fetchDaily();
+  await fetchAbsences();
+  await fetchSummary();
+}
+
+async function uploadCsv(){
+  const fileInput = document.getElementById('csvFile');
+  const file = fileInput.files[0];
+  if (!file) {
+    document.getElementById('uploadMsg').textContent = 'Select a CSV file first';
+    return;
+  }
+  const formData = new FormData();
+  formData.append('attendance', file);
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const j = await res.json();
+  document.getElementById('uploadMsg').textContent = j.status === 'ok' ? `Uploaded ${j.rows} rows` : j.message;
+  if (j.status === 'ok') {
+    await fetchDaily();
+    await fetchAbsences();
+    await fetchSummary();
+  }
+}
+
+async function generateShareLink(){
+  const res = await fetch('/api/share/generate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({days: 7, note: 'placement share'})
+  });
+  const data = await res.json();
+  if (data.status === 'ok') {
+    document.getElementById('shareLink').value = data.url;
+    document.getElementById('shareMsg').textContent = `Share link created and valid until ${data.expires}`;
+  } else {
+    document.getElementById('shareMsg').textContent = `Failed to create share link`;
+  }
+}
+
+function updateRangeMessage(text) {
+  document.getElementById('rangeMsg').textContent = text;
+}
+
+function clearRange() {
+  document.getElementById('startDate').value = '';
+  document.getElementById('endDate').value = '';
+  updateRangeMessage('Range cleared');
+}
+
+function renderDaily(daily){
+  const labels = daily.map(r => r.date);
+  const data = daily.map(r => r.present_rate);
+  const ctx = document.getElementById('dailyChart');
+  if (dailyChartInstance) dailyChartInstance.destroy();
+  dailyChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Attendance %', data, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.15)', tension: 0.2 }] },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+  });
+}
+
+function renderAbsences(list){
+  const labels = list.map(r => r.student_name);
+  const data = list.map(r => r.absences);
+  const ids = list.map(r => r.student_id);
+  const ctx = document.getElementById('absentChart');
+  if (absentChartInstance) absentChartInstance.destroy();
+  absentChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Absences', data, backgroundColor: '#ef4444' }] },
+    options: {
+      responsive: true,
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const element = elements[0];
+        const index = element.index;
+        const studentId = ids[index];
+        if (studentId) {
+          window.location.href = `/student/${studentId}`;
+        }
+      }
+    }
+  });
+}
+
+async function loadAttendanceDay(){
+  const date = document.getElementById('attendanceDate').value;
+  if (!date) {
+    document.getElementById('attendanceMsg').textContent = 'Select a date';
+    return;
+  }
+  document.getElementById('attendanceMsg').textContent = '';
+  const list = await fetchJSON(`/api/attendance/day?date=${date}`);
+  const container = document.getElementById('attendanceTable');
+  container.innerHTML = '';
+  list.forEach(s => {
+    const row = document.createElement('div');
+    row.style.marginBottom = '6px';
+    row.innerHTML = `<label style="width:120px;display:inline-block">ID ${s.student_id}</label><span style="width:200px;display:inline-block">${s.student_name}</span><label style="margin-left:8px"><input type="checkbox" data-id="${s.student_id}" ${s.present? 'checked':''}/> Present</label>`;
+    container.appendChild(row);
+  });
+}
+
+async function saveAttendanceDay(){
+  const date = document.getElementById('attendanceDate').value;
+  if (!date) { alert('Select a date'); return; }
+  const inputs = Array.from(document.querySelectorAll('#attendanceTable input[type=checkbox]'));
+  const records = inputs.map(i => ({ student_id: i.getAttribute('data-id'), present: i.checked ? 1 : 0 }));
+  const res = await fetch('/api/attendance/save_day', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date, records }) });
+  const j = await res.json();
+  if (j.status === 'ok'){
+    document.getElementById('attendanceMsg').textContent = `Saved ${j.saved} records`;
+    await fetchDaily(); await fetchAbsences(); await fetchSummary();
+  } else {
+    document.getElementById('attendanceMsg').textContent = j.message || 'Failed to save';
+  }
+}
+
+(async ()=>{
+  await fetchDaily();
+  await fetchAbsences();
+  await fetchSummary();
+  document.getElementById('loadStudents').addEventListener('click', fetchStudents);
+  document.getElementById('saveStudents').addEventListener('click', saveStudents);
+  document.getElementById('uploadCsv').addEventListener('click', uploadCsv);
+  document.getElementById('generateShare').addEventListener('click', generateShareLink);
+  document.getElementById('loadAttendance').addEventListener('click', loadAttendanceDay);
+  document.getElementById('saveAttendance').addEventListener('click', saveAttendanceDay);
+  // default attendance date to today
+  try { document.getElementById('attendanceDate').value = new Date().toISOString().slice(0,10); } catch(e){}
+  document.getElementById('applyRange').addEventListener('click', async () => {
+    await fetchDaily();
+    await fetchAbsences();
+    await fetchSummary();
+    updateRangeMessage('Filter applied');
+  });
+  document.getElementById('clearRange').addEventListener('click', async () => {
+    clearRange();
+    await fetchDaily();
+    await fetchAbsences();
+    await fetchSummary();
+  });
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import os
 import shutil
-import shutil
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -14,7 +13,10 @@ import json
 import uuid
 
 VALID_USERS = {
-    'sanjay r': 'sanjay123'   
+    'sanjay r': 'sanjay123',
+    'sairam': 'sairam123',
+    'srinath': 'srinath123',
+    'sai': 'sai123'
 }
 
 
@@ -156,7 +158,7 @@ def index():
 def login():
 	message = ''
 	if request.method == 'POST':
-		username = request.form.get('username', '').strip()
+		username = request.form.get('username', '').strip().lower()
 		password = request.form.get('password', '').strip()
 		if VALID_USERS.get(username) == password:
 			session['user'] = username
@@ -254,6 +256,66 @@ def student_data(student_id):
 	df = df[df['student_id'].astype(int) == int(student_id)].sort_values('date')
 	out = df[['date', 'present']].to_dict(orient='records')
 	return jsonify(out)
+
+
+@app.route('/api/attendance/day')
+@login_required
+def attendance_day():
+	date = request.args.get('date')
+	if not date:
+		return jsonify({'error': 'date parameter required'}), 400
+	df = load_data()
+	# canonicalize types
+	df['student_id'] = df['student_id'].astype(int)
+	students = df[['student_id', 'student_name']].drop_duplicates().sort_values('student_id')
+	day_df = df[df['date'] == date][['student_id', 'student_name', 'present']]
+	merged = students.merge(day_df, on=['student_id', 'student_name'], how='left')
+	merged['present'] = merged['present'].fillna(0).astype(int)
+	# ensure JSON-serializable types
+	merged['student_id'] = merged['student_id'].astype(int)
+	return jsonify(merged.to_dict(orient='records'))
+
+
+@app.route('/api/attendance/save_day', methods=['POST'])
+@login_required
+def save_attendance_day():
+	payload = request.get_json() or {}
+	date = payload.get('date')
+	records = payload.get('records', [])
+	if not date or not isinstance(records, list):
+		return jsonify({'status': 'error', 'message': 'date and records list required'}), 400
+
+	# load current data and a name map
+	orig = load_data()
+	orig['student_id'] = orig['student_id'].astype(int)
+	name_map = {int(r['student_id']): r['student_name'] for _, r in orig[['student_id', 'student_name']].drop_duplicates().iterrows()}
+
+	# remove existing rows for the provided student_ids on this date
+	try:
+		ids = [int(r.get('student_id')) for r in records]
+	except Exception:
+		return jsonify({'status': 'error', 'message': 'student_id must be integers'}), 400
+
+	df = orig[~((orig['date'] == date) & (orig['student_id'].isin(ids)))]
+
+	rows = []
+	for r in records:
+		sid = int(r.get('student_id'))
+		present = 1 if int(r.get('present', 0)) else 0
+		name = r.get('student_name') or name_map.get(sid) or f'Student {sid}'
+		rows.append({'date': date, 'student_id': sid, 'student_name': name, 'present': present})
+
+	if rows:
+		new_df = pd.DataFrame(rows)
+		# ensure consistent types
+		new_df['student_id'] = new_df['student_id'].astype(int)
+		new_df['present'] = new_df['present'].astype(int)
+		out_df = pd.concat([df, new_df], ignore_index=True)
+	else:
+		out_df = df
+
+	save_data(out_df)
+	return jsonify({'status': 'ok', 'saved': len(rows)})
 
 
 @app.route('/student/<int:student_id>')

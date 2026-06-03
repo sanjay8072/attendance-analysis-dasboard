@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+backups/
+data/attendance.csv
+*.env
+.env
+.vscode/
+node_modules/

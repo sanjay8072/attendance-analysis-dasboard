@@ -25,8 +25,11 @@ Notes
 - If `data/attendance.csv` is missing, the app will auto-load `sample_attendance.csv` from the project root.
 - Use the date range controls to filter charts.
 - Login is required to access the dashboard.
-- Default account:
+- Default accounts:
   - `sanjay r` / `sanjay123`
+  - `sairam` / `sairam123`
+  - `srinath` / `srinath123`
+  - `sai` / `sai123`
 - API endpoints: `/api/daily_rates`, `/api/absences`, `/api/students`, `/api/update_names`, `/api/upload`, `/api/summary`.
 - The app now saves backups of `data/attendance.csv` to the `backups/` folder before overwriting it.
 - Use the dashboard button to generate a public share link for read-only access.
